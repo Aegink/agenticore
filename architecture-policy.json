@@ -1,0 +1,391 @@
+{
+  "version": 1,
+  "comment": "架构即代码策略（T1/T-P1-121；T0-2 内核重构治理扩展；T0-4 深导入激活 + 契约面双规则）。规则语义见 tools/architecture-check.mjs 头注。渐进采用：managed=false 的存量域违规降级为警告（首次全量跑的警告清单即收紧路线基线）；managed=true 域硬失败。requires 白名单首轮从现状 import 反推（现状即事实——先声明后收紧：新增未声明依赖即违规）。publicEntrypoints：kernel/session/models 三域清单为 T0-4 现状被跨域 import 的文件全集反推（激活 forbidDeepImports——新文件被深导入即违规，冻结增量；清单随批 1~8 搬迁同步维护，core 单入口 src/core/index.ts 为最终形状）。maxContractLines/maxPublicMethods 为 zcode 形状契约面双规则（contract.* 行数 ≤300；contract.ts 公开方法 ≤12）。T0-2（内核重构批 0/W1）：新增 core（managed:true 硬约束 + requires:[] + publicEntrypoints，零跨域出边是本重构的达成交付物）/ runtime（批 5 装配搬入，requires 按『可预见装配面』预声明：core + ext-builtin/plugins + 装配线各业务域；不含 host/acp/cli——host→runtime 单向、acp/cli 为前端面）/ ext-builtin（批 4 三内置扩展包搬入，requires=core+过渡期 mcp/policy/session，批 4 后收紧）/ plugins（批 6 内置工具搬入，requires=core+工具现状跨域）；kernel 过渡期保留 managed:false 但 requires 收紧为 []——kernel 全部存量出边记档为警告债务，新增依赖即告警，配合向 core 迁移直至 kernel 域清空删除。",
+  "modules": [
+    {
+      "id": "core",
+      "roots": [
+        "src/core"
+      ],
+      "managed": true,
+      "requires": [],
+      "publicEntrypoints": [
+        "src/core/index.ts"
+      ],
+      "owner": "kernel"
+    },
+    {
+      "id": "runtime",
+      "roots": [
+        "src/runtime"
+      ],
+      "managed": true,
+      "requires": [
+        "core",
+        "ext-builtin",
+        "plugins",
+        "attachments",
+        "context",
+        "diagnostics",
+        "lsp",
+        "mcp",
+        "models",
+        "obs",
+        "policy",
+        "sandbox",
+        "scheduler",
+        "session",
+        "test-support"
+      ],
+      "publicEntrypoints": [],
+      "owner": "kernel"
+    },
+    {
+      "id": "ext-builtin",
+      "roots": [
+        "src/ext-builtin"
+      ],
+      "managed": true,
+      "requires": [
+        "core",
+        "mcp",
+        "models",
+        "plugins",
+        "policy",
+        "runtime",
+        "session"
+      ],
+      "publicEntrypoints": [],
+      "owner": "kernel"
+    },
+    {
+      "id": "plugins",
+      "roots": [
+        "plugins"
+      ],
+      "managed": true,
+      "requires": [
+        "core",
+        "attachments",
+        "context",
+        "lsp",
+        "mcp",
+        "models",
+        "policy",
+        "sandbox",
+        "session",
+        "ext-builtin"
+      ],
+      "publicEntrypoints": [],
+      "owner": "kernel"
+    },
+    {
+      "id": "attachments",
+      "roots": [
+        "src/attachments"
+      ],
+      "managed": true,
+      "requires": [
+        "core"
+      ],
+      "publicEntrypoints": [],
+      "owner": "wangh"
+    },
+    {
+      "id": "context",
+      "roots": [
+        "src/context"
+      ],
+      "managed": false,
+      "requires": [
+        "core",
+        "models",
+        "sandbox",
+        "session"
+      ],
+      "publicEntrypoints": [],
+      "owner": "wangh"
+    },
+    {
+      "id": "diagnostics",
+      "roots": [
+        "src/diagnostics"
+      ],
+      "managed": true,
+      "requires": [
+        "core",
+        "sandbox",
+        "session"
+      ],
+      "publicEntrypoints": [],
+      "owner": "wangh"
+    },
+    {
+      "id": "lsp",
+      "roots": [
+        "src/lsp"
+      ],
+      "managed": false,
+      "requires": [
+        "core"
+      ],
+      "publicEntrypoints": [],
+      "owner": "wangh"
+    },
+    {
+      "id": "mcp",
+      "roots": [
+        "src/mcp"
+      ],
+      "managed": false,
+      "requires": [
+        "core"
+      ],
+      "publicEntrypoints": [],
+      "owner": "wangh"
+    },
+    {
+      "id": "models",
+      "roots": [
+        "src/models"
+      ],
+      "managed": false,
+      "requires": [
+        "core"
+      ],
+      "publicEntrypoints": [
+        "src/models/provider.ts",
+        "src/models/identity.ts",
+        "src/models/retry.ts",
+        "src/models/config.ts",
+        "src/models/oauth.ts",
+        "src/models/health.ts",
+        "src/models/anthropic-messages.ts",
+        "src/models/google-generate.ts",
+        "src/models/openai-compat.ts",
+        "src/models/auth.ts",
+        "src/models/catalog.ts",
+        "src/models/catalog-data.ts"
+      ],
+      "owner": "wangh"
+    },
+    {
+      "id": "obs",
+      "roots": [
+        "src/obs"
+      ],
+      "managed": true,
+      "requires": [
+        "core",
+        "models",
+        "session"
+      ],
+      "publicEntrypoints": [],
+      "owner": "wangh"
+    },
+    {
+      "id": "policy",
+      "roots": [
+        "src/policy"
+      ],
+      "managed": false,
+      "requires": [
+        "core",
+        "models"
+      ],
+      "publicEntrypoints": [],
+      "owner": "wangh"
+    },
+    {
+      "id": "sandbox",
+      "roots": [
+        "src/sandbox"
+      ],
+      "managed": false,
+      "requires": [
+        "core"
+      ],
+      "publicEntrypoints": [],
+      "owner": "wangh"
+    },
+    {
+      "id": "scheduler",
+      "roots": [
+        "src/scheduler"
+      ],
+      "managed": true,
+      "requires": [
+        "core",
+        "ext-builtin"
+      ],
+      "publicEntrypoints": [],
+      "owner": "wangh"
+    },
+    {
+      "id": "session",
+      "roots": [
+        "src/session"
+      ],
+      "managed": false,
+      "requires": [
+        "attachments",
+        "core",
+        "models",
+        "policy",
+        "sandbox"
+      ],
+      "publicEntrypoints": [
+        "src/session/settings.ts",
+        "src/session/db.ts",
+        "src/session/store.ts",
+        "src/session/credentials.ts",
+        "src/session/session-id.ts",
+        "src/session/messages.ts",
+        "src/session/project.ts",
+        "src/session/subagents-config.ts",
+        "src/session/query.ts",
+        "src/session/reference.ts",
+        "src/session/owner-port.ts",
+        "src/session/settings-transfer.ts",
+        "src/session/git-checkpoint.ts",
+        "src/session/cleanup.ts",
+        "src/session/collaboration.ts",
+        "src/session/review-changes.ts",
+        "src/session/db-export.ts",
+        "src/session/checkpoint-timeline.ts",
+        "src/session/boot-maintenance.ts",
+        "src/session/revert.ts",
+        "src/session/persona.ts",
+        "src/session/epoch.ts"
+      ],
+      "owner": "wangh"
+    },
+    {
+      "id": "test-support",
+      "roots": [
+        "src/test-support"
+      ],
+      "managed": true,
+      "requires": [
+        "core",
+        "models",
+        "session"
+      ],
+      "publicEntrypoints": [],
+      "owner": "wangh"
+    }
+  ],
+  "global": {
+    "maxFileLines": 400,
+    "maxContractLines": 300,
+    "maxPublicMethods": 12,
+    "forbidCycles": true,
+    "forbidDeepImports": true
+  },
+  "exceptions": [
+    {
+      "path": "plugins/tools-builtin/task.test.ts",
+      "reason": "T6-6 搬迁记档（2026-10-10）：task 工具测试 607 行——测试豁免先例。"
+    },
+    {
+      "path": "plugins/tools-builtin/index.ts",
+      "reason": "T6-6 搬迁记档（2026-10-10）：工具清单单一事实源 416 行（39 工具注册+参数名单——BUILTIN_TOOL_NAMES 单源）；拆分破坏单源语义，列 T8 评估。"
+    },
+    {
+      "path": "plugins/tools-builtin/builtin.test.ts",
+      "reason": "T6-6 搬迁记档（2026-10-10）：builtin 聚合测试 1073 行（39 工具全注册回归）——测试豁免先例。"
+    },
+    {
+      "path": "plugins/tools-builtin/batch1-tools.test.ts",
+      "reason": "T6-6 搬迁记档（2026-10-10）：batch1 工具集成测试 969 行——测试豁免先例。"
+    },
+    {
+      "path": "plugins/tools-builtin/webfetch.ts",
+      "reason": "T6-5 搬迁记档（2026-10-10）：webfetch 419 行（URL 校验/协议门/HTML→文本/截断一体——wire 内聚面）；拆分列 T8 候选（按 fetch/convert 两段），届时删本豁免。"
+    },
+    {
+      "path": "plugins/tools-builtin/bash.ts",
+      "reason": "T6-4 搬迁记档（2026-10-10）：bash 工具 402 行（真机 shell 语义/沙箱/重试护栏装配面）——超限 2 行；拆分列 T8 候选，届时删本豁免。"
+    },
+    {
+      "path": "plugins/tools-builtin/apply-patch.ts",
+      "reason": "T6-3 搬迁记档（2026-10-10）：apply_patch 工具 594 行（补丁解析/应用/校验一体——算法内聚面）；拆分列 T8 候选（按 parse/apply/verify 三段），届时删本豁免。"
+    },
+    {
+      "path": "src/runtime/agent-process.test.ts",
+      "reason": "T5-1 搬迁记档（2026-10-10）：进程测试 1401 行（真子进程 spawn 全链 + 握手/换模/resume 集成）——测试豁免先例同款。"
+    },
+    {
+      "path": "src/runtime/agent-process.ts",
+      "reason": "T5-1 搬迁记档（2026-10-10）：进程编排 2111 行（Q16 冷启动/协议循环/转发收执/生命周期——G8 载体）；拆分列 T8 候选（按启动/循环/收尾三段），届时删本豁免。"
+    },
+    {
+      "path": "src/runtime/assembly.ts",
+      "reason": "T5-1 搬迁记档（2026-10-10）：装配编排 1376 行——行为体已按域文件拆分（C10 先例：本文件只准做一行收敛装配），行数随装配面线性增长属编排固有形态；豁免带上限（再增行为逻辑必须先拆域文件）。"
+    },
+    {
+      "path": "src/runtime/child.ts",
+      "reason": "T5-1 搬迁记档（2026-10-10）：子进程入口 753 行（CLI 解析 + 装配 + 协议循环接线——宿主装配面固有形态，host/server.ts 豁免先例同款）；装配改接收注册表的拆分在 T5-4（EP-10 装配数据化）落地，届时重估。"
+    },
+    {
+      "path": "src/core/skeleton/protocol-payload.ts",
+      "reason": "T1-2 搬迁记档（2026-10-10）：agent-protocol 本体 1095 行（事件词汇源同款问题）；T1-4 分层后为 protocol-payload.ts（业务载荷 schema，1092 行）——decodeRequest/decodeMessage 是逐字段严格校验面，拆分需按请求/响应族分文件且全部消费面跟随，超出本批纯搬迁/分层范围；豁免带上限（按消息族拆分列 T8 候选，届时删本豁免）。"
+    },
+    {
+      "path": "src/core/skeleton/hooks.test.ts",
+      "reason": "T1-2 搬迁记档（2026-10-10）：hooks 端到端测试 455 行——测试文件行数豁免有先例（diagnostics/live-p2.test.ts）；拆分收益低于共享 fixture 的可读性。"
+    },
+    {
+      "path": "src/core/primitives/loop/loop.ts",
+      "reason": "T3-2 搬迁记档（2026-10-10）：loop 驱动本体 1572 行（W7 拆出 guards/watchdog 后残余驱动+决策+链面）——runTurn/runStep 是单块控制流（与事件落盘点强耦合），进一步拆分在 T3-2 六文件分流后由 T8 收口评估；豁免带上限（再增逻辑必须先拆）。"
+    },
+    {
+      "path": "src/core/primitives/loop/loop.test.ts",
+      "reason": "T3-2 搬迁记档（2026-10-10）：loop 主测试 1453 行（G10 护栏断言载体——53 用例含 maxSteps/mutation/OUTPUT/watchdog 专项）——测试文件行数豁免有先例（hooks.test/diagnostics live-p2）；拆分收益低于共享 fixture 的可读性。"
+    },
+    {
+      "path": "src/core/primitives/loop/model-switch.test.ts",
+      "reason": "T3-2 搬迁记档（2026-10-10）：model-switch 集成测试 874 行（真 stdio spawn 链路）——测试文件豁免先例同上。"
+    },
+    {
+      "path": "src/ext-builtin/prompt-defaults/plan-mode.test.ts",
+      "reason": "T4-2 搬迁记档（2026-10-10）：plan 模式测试 404 行——测试文件行数豁免先例（hooks.test 等）；拆分收益低。"
+    },
+    {
+      "path": "src/diagnostics/live-p2.test.ts",
+      "reason": "U3/T-P3-105 收口记档：P2 15e 的真实端点联调端到端测试（427 行）——脚本化场景内聚在一个文件，拆分降低可读性；豁免只限测试文件，产品代码仍受上限约束（文件拆分列为后续重构候选）。"
+    },
+    {
+      "path": "src/ext-builtin/subagent-engine/subagent.ts",
+      "reason": "T4-3 搬迁记档（2026-10-10）：子代理引擎 802 行（fork 循环/深度检查/后台委托——H1 载体）；W9/T9-2 增量（resume/task_send/steer）。"
+    },
+    {
+      "path": "src/core/skeleton/events.ts",
+      "reason": "事件闭集 981 行（31 事件类型 + C14/C16 闸门——词汇表单一事实源）；W15b/T9-7 加 ignorable 信封面。"
+    },
+    {
+      "path": "src/core/primitives/session/project.ts",
+      "reason": "E16 投影器 867 行（事件流校验/折叠纪律——不变量 1 承载面）。"
+    },
+    {
+      "path": "src/ext-builtin/plugin-runtime/plugin-manifest-contributes.ts",
+      "reason": "清单贡献校验 644 行（六类贡献形状 + W15b services/bus/telemetry 三类）。"
+    },
+    {
+      "path": "src/session/collaboration.ts",
+      "reason": "协作账本服务 416 行（状态机/环检测/流投影——T9-1 载体）；W16 排查 P1-1/P1-2 增量（cancelledDuringRun 取消闸 + collabId 时间戳防撞）。"
+    },
+    {
+      "path": "src/session/settings-line-edit.ts",
+      "reason": "配置行级写回 444 行（LineEdit/diffRecords/planEdits——T9-4 载体）；W16 排查 P0/P1 增量（JSONC 结构校验 + locateKeyRange 值型收口 + 重复键/TOCTOU 防线）。"
+    },
+    {
+      "path": "src/session/store.ts",
+      "reason": "SessionStore 418 行（write-behind/restore 三级降级——G1/G2 载体）；W16 排查 P0-1/P1-3 增量（尾桥 + flush 换桶回塞）。"
+    },
+    {
+      "path": "src/models/catalog.generated.ts",
+      "reason": "W18 模型目录生成产物 24,333 行（2647 条目数据冻结边界——tools/generate-model-catalog.mjs 产出，不手工编辑；行数即数据量，不承载逻辑）。"
+    }
+  ]
+}

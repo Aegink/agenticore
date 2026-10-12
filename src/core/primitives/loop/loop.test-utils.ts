@@ -1,0 +1,129 @@
+/**
+ * loop 测试共用工具（T-3-02 起，queue.test 等复用）——剧本化假 provider +
+ * 组装 harness。只服务测试，不入运行时。
+ */
+
+import type { StreamChunk } from "../../skeleton/events.js";
+import {
+  AgentLoop,
+  type AgentLoopDeps,
+  type DecideTurn,
+  type StepRecord,
+} from "./loop.js";
+import type { ChatRequest, ModelProvider } from "../../../models/provider.js";
+import type { PromptQueue } from "../../skeleton/queue.js";
+import type { RunState } from "../../skeleton/run-state.js";
+import {SessionEventStore, type SessionStore} from "../../../session/store.js";
+
+/** 剧本化假 provider：每次模型调用吃一份 StreamChunk 脚本，记录收到的请求。 */
+export class ScriptedProvider implements ModelProvider {
+  private readonly scripts: StreamChunk[][] = [];
+  readonly requests: ChatRequest[] = [];
+  private callCount = 0;
+
+  mount(script: StreamChunk[]): void {
+    this.scripts.push(script);
+  }
+
+  async *streamChat(req: ChatRequest): AsyncIterable<StreamChunk> {
+    this.requests.push(req);
+    const script = this.scripts[this.callCount];
+    this.callCount += 1;
+    if (!script) throw new Error(`无剧本（第 ${this.callCount} 次调用）`);
+    for (const chunk of script) yield chunk;
+  }
+
+  /**
+   * 计数先行访问器（O13/O20，T-P1-31）：断言恰有 i+1 次模型调用并取第 i 个
+   * 请求——数量不符给可读失败（含说明与 expected/got），why 必填。
+   */
+  requestAt(i: number, why: string): ChatRequest {
+    const actual = this.requests.length;
+    if (actual < i + 1) {
+      throw new Error(
+        `「${why}」——期待至少 ${i + 1} 次模型调用，实际 ${actual} 次（expected ${i + 1}, got ${actual}）`,
+      );
+    }
+    return this.requests[i]!;
+  }
+}
+
+export interface Harness {
+  store: SessionStore;
+  loop: AgentLoop;
+  decideCalls: StepRecord[];
+}
+
+export function makeLoop(
+  provider: ModelProvider,
+  opts?: {
+    decideTurn?: DecideTurn;
+    executeTool?: AgentLoopDeps["executeTool"];
+    layers?: AgentLoopDeps["layers"];
+    queue?: PromptQueue;
+    runState?: RunState;
+    toolBudget?: AgentLoopDeps["toolBudget"];
+    toolExecution?: AgentLoopDeps["toolExecution"];
+    isParallelTool?: AgentLoopDeps["isParallelTool"];
+    toolsProvider?: AgentLoopDeps["toolsProvider"];
+    onCacheAnchorChange?: AgentLoopDeps["onCacheAnchorChange"];
+    modelForTurn?: AgentLoopDeps["modelForTurn"];
+    beforeFirstModelRequest?: AgentLoopDeps["beforeFirstModelRequest"];
+    promptGate?: AgentLoopDeps["promptGate"];
+    logger?: AgentLoopDeps["logger"];
+    maxStepsPerTurn?: AgentLoopDeps["maxStepsPerTurn"];
+    streamRecovery?: AgentLoopDeps["streamRecovery"];
+    abortTimeoutMs?: AgentLoopDeps["abortTimeoutMs"];
+    mutationBudget?: AgentLoopDeps["mutationBudget"];
+    toolRuntimeMeta?: AgentLoopDeps["toolRuntimeMeta"];
+  },
+): Harness {
+  const store = new SessionEventStore();
+  const decideCalls: StepRecord[] = [];
+  // 默认决策（真实语义的占位）：有 toolCall 继续、没有则 end——注意 loop
+  // 本体不看 toolCall，继续/停止完全来自这里。
+  const decideTurn: DecideTurn = async (record) => {
+    decideCalls.push(record);
+    if (opts?.decideTurn) return opts.decideTurn(record);
+    return record.toolCalls.length > 0
+      ? { action: "continue" }
+      : { action: "end" };
+  };
+  const executeTool: AgentLoopDeps["executeTool"] =
+    opts?.executeTool ??
+    (async (call) => ({ content: `ran ${call.name} ${call.arguments}` }));
+  const loop = new AgentLoop({
+    sessionId: "s1",
+    store,
+    provider,
+    identity: { provider: "mock", modelId: "m-1" },
+    executeTool,
+    decideTurn,
+    ...(opts?.layers ? { layers: opts.layers } : {}),
+    ...(opts?.queue ? { queue: opts.queue } : {}),
+    ...(opts?.runState ? { runState: opts.runState } : {}),
+    ...(opts?.toolBudget ? { toolBudget: opts.toolBudget } : {}),
+    ...(opts?.toolExecution ? { toolExecution: opts.toolExecution } : {}),
+    ...(opts?.isParallelTool ? { isParallelTool: opts.isParallelTool } : {}),
+    ...(opts?.toolsProvider ? { toolsProvider: opts.toolsProvider } : {}),
+    ...(opts?.onCacheAnchorChange
+      ? { onCacheAnchorChange: opts.onCacheAnchorChange }
+      : {}),
+    ...(opts?.modelForTurn ? { modelForTurn: opts.modelForTurn } : {}),
+    ...(opts?.beforeFirstModelRequest
+      ? { beforeFirstModelRequest: opts.beforeFirstModelRequest }
+      : {}),
+    ...(opts?.promptGate ? { promptGate: opts.promptGate } : {}),
+    ...(opts?.logger ? { logger: opts.logger } : {}),
+    ...(opts?.maxStepsPerTurn !== undefined
+      ? { maxStepsPerTurn: opts.maxStepsPerTurn }
+      : {}),
+    ...(opts?.streamRecovery !== undefined
+      ? { streamRecovery: opts.streamRecovery }
+      : {}),
+    ...(opts?.abortTimeoutMs !== undefined ? { abortTimeoutMs: opts.abortTimeoutMs } : {}),
+    ...(opts?.mutationBudget !== undefined ? { mutationBudget: opts.mutationBudget } : {}),
+    ...(opts?.toolRuntimeMeta !== undefined ? { toolRuntimeMeta: opts.toolRuntimeMeta } : {}),
+  });
+  return { store, loop, decideCalls };
+}

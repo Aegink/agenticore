@@ -1,0 +1,93 @@
+/**
+ * skill_load 工具（I2 / T-P1-08）——模型按名索要技能正文。清单（名+描述）
+ * 在系统提示尾段；正文在模型按名调用本工具时读取（按需加载最小面，不引入
+ * F12 检索式延迟加载）。
+ *
+ * 每次执行重新扫描不缓存——改 SKILL.md 即时生效（registry 描述同纪律）。
+ * 读取经 PathGuard（不变量 2：工具不绕过沙箱——技能文件在 workspaceRoot
+ * 内，守卫边界覆盖）；未知名返回类型化 SKILL_NOT_FOUND（isError 回喂可自修，
+ * 不上抛——注册表错误分层）。
+ */
+
+import { PathGuard, PathGuardError } from "../../src/sandbox/path-guard.js";
+import type { ToolDef } from "../../src/core/index.js";
+import { toolError } from "./util.js";
+import {
+  formatSkillInvocation,
+  loadSkillsFromRoots,
+  skillBody,
+} from "../../src/ext-builtin/prompt-defaults/skills.js";
+
+export function createSkillLoadTool(options: {
+  pathGuard: PathGuard;
+  skillsRoot: string;
+  /** U22/T-P3-125：附加来源目录（settings skills.roots——多根合并扫描）。 */
+  skillsRoots?: readonly string[];
+  /** U22/T-P3-125：停用名单（settings skills.disabled——可用清单剔除）。 */
+  skillsDisabled?: readonly string[];
+  /** T-P3-148 D：插件贡献技能目录（getter 活读——装载晚于注册，调用时点已回填）。 */
+  pluginSkillDirs?: () => readonly { readonly dir: string; readonly namePrefix: string }[];
+}): ToolDef {
+  return {
+    name: "skill_load",
+    // W5/T3-6 工具契约元数据（声明优先——gate/调度/审批三处共读；缺声明从严）
+    sideEffectScope: "none",
+    readOnly: true,
+    parameters: {
+      type: "object",
+      properties: {
+        name: {
+          type: "string",
+          description: "技能名（系统提示「可用技能」清单中的名称）",
+        },
+      },
+      required: ["name"],
+    },
+    parallel: true, // B17：纯读，声明可并行（parallel 模式持读锁）
+    async execute(args) {
+      const name = args.name;
+      if (typeof name !== "string" || name === "") {
+        return toolError(
+          "SkillError",
+          "INVALID_ARGUMENTS",
+          "skill_load 需要 name（非空字符串）",
+        );
+      }
+      const { skills } = loadSkillsFromRoots(
+        options.skillsRoot,
+        options.skillsRoots,
+        options.skillsDisabled !== undefined || options.pluginSkillDirs !== undefined
+          ? {
+              ...(options.skillsDisabled !== undefined ? { disabled: options.skillsDisabled } : {}),
+              ...(options.pluginSkillDirs !== undefined ? { extraDirs: options.pluginSkillDirs() } : {}),
+            }
+          : undefined,
+      );
+      const skill = skills.find((s) => s.name === name);
+      if (!skill) {
+        const available = skills.map((s) => s.name).join(", ");
+        return toolError(
+          "SkillError",
+          "SKILL_NOT_FOUND",
+          available
+            ? `未知技能：${name}（可用：${available}）`
+            : `未知技能：${name}（当前无可用技能）`,
+        );
+      }
+      let raw: string;
+      try {
+        raw = await options.pathGuard.read(skill.filePath);
+      } catch (e) {
+        if (e instanceof PathGuardError) {
+          return toolError("SkillError", e.code, e.message);
+        }
+        return toolError(
+          "SkillError",
+          (e as NodeJS.ErrnoException).code ?? "IO_ERROR",
+          `读取技能 ${name} 失败：${e instanceof Error ? e.message : String(e)}`,
+        );
+      }
+      return { content: formatSkillInvocation(skill, skillBody(raw)) };
+    },
+  };
+}
