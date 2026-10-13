@@ -11,6 +11,7 @@
     "test": "vitest run",
     "check": "tsc --noEmit",
     "build": "tsc && node scripts/copy-assets.mjs",
+    "example": "tsc && node examples/minimal-loop.mjs",
     "architecture:check": "node tools/architecture-check.mjs",
     "vocabulary:check": "node tools/vocabulary-check.mjs",
     "kernel:edges": "node tools/kernel-edges.cjs",
